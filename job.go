@@ -3,13 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	v12 "k8s.io/api/batch/v1"
 	"time"
 
 	"github.com/pkg/errors"
-	v1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/rest"
 )
 
 var (
@@ -27,13 +26,14 @@ type logger interface {
 }
 
 type jobClient interface {
-	Create(*v1.Job) (*v1.Job, error)
-	Get(name string, options metav1.GetOptions) (*v1.Job, error)
+	Get(ctx context.Context, name string, opts metav1.GetOptions) (*v12.Job, error)
+	Create(ctx context.Context, job *v12.Job, opts metav1.CreateOptions) (*v12.Job, error)
 }
 
 type podClient interface {
-	GetLogs(name string, opts *corev1.PodLogOptions) *rest.Request
-	List(opts metav1.ListOptions) (*corev1.PodList, error)
+	Create(ctx context.Context, pod *corev1.Pod, opts metav1.CreateOptions) (*corev1.Pod, error)
+	Get(ctx context.Context, name string, opts metav1.GetOptions) (*corev1.Pod, error)
+	List(ctx context.Context, opts metav1.ListOptions) (*corev1.PodList, error)
 }
 
 type JobRunner struct {
@@ -53,7 +53,7 @@ func NewJobRunner(jc jobClient, pc podClient, pollInterval time.Duration, log lo
 }
 
 func (j *JobRunner) RunJob(ctx context.Context, jobPrefix, namespace, image string) (string, error) {
-	job, err := j.jc.Create(&v1.Job{
+	job, err := j.jc.Create(ctx, &v12.Job{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Job",
 			APIVersion: "batch/v1",
@@ -62,7 +62,7 @@ func (j *JobRunner) RunJob(ctx context.Context, jobPrefix, namespace, image stri
 			GenerateName: fmt.Sprintf("%s-", jobPrefix),
 			Namespace:    namespace,
 		},
-		Spec: v1.JobSpec{
+		Spec: v12.JobSpec{
 			BackoffLimit: intPtr(0),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
@@ -79,7 +79,7 @@ func (j *JobRunner) RunJob(ctx context.Context, jobPrefix, namespace, image stri
 				},
 			},
 		},
-	})
+	}, metav1.CreateOptions{}) // todo
 
 	if err != nil {
 		return "", errors.Wrapf(errJobNotCreated, "error starting job: %v", err)
@@ -109,11 +109,11 @@ func (j *JobRunner) pollJobStatus(ctx context.Context, jobName string) error {
 			}
 
 			if job != nil {
-				if i := findCondition(job.Status.Conditions, v1.JobFailed); i > -1 {
+				if i := findCondition(job.Status.Conditions, v12.JobFailed); i > -1 {
 					return errors.Errorf("job failed with %s: %s", job.Status.Conditions[i].Reason, job.Status.Conditions[i].Message)
 				}
 
-				if i := findCondition(job.Status.Conditions, v1.JobComplete); i > -1 {
+				if i := findCondition(job.Status.Conditions, v12.JobComplete); i > -1 {
 					return nil
 				}
 			}
@@ -127,30 +127,31 @@ func (j *JobRunner) pollJobStatus(ctx context.Context, jobName string) error {
 	}
 }
 
-func (j *JobRunner) getJob(ctx context.Context, jobName string) (*v1.Job, error) {
-	return j.jc.Get(jobName, metav1.GetOptions{})
+func (j *JobRunner) getJob(ctx context.Context, jobName string) (*v12.Job, error) {
+	return j.jc.Get(ctx, jobName, metav1.GetOptions{})
 }
 
 func (j *JobRunner) getLogs(ctx context.Context, jobName string) (string, error) {
-	pods, err := j.pc.List(metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("job-name=%s", jobName),
-	})
-	if err != nil {
-		return "", errors.Wrapf(errPodNotFound, "could not find pod: %v", err)
-	}
+	//pods, err := j.pc.List(ctx, metav1.ListOptions{
+	//	LabelSelector: fmt.Sprintf("job-name=%s", jobName),
+	//})
+	//if err != nil {
+	//	return "", errors.Wrapf(errPodNotFound, "could not find pod: %v", err)
+	//}
 
 	// Need to figure out how to handle jobs where
 	// multiple pods are created because of backoffPolicy
-	podName := pods.Items[0].GetName()
-	logBytes, err := j.pc.GetLogs(podName, &corev1.PodLogOptions{}).DoRaw()
-	if err != nil {
-		return "", errors.Wrapf(errLogsNotFound, "could not read logs: %v", err)
-	}
+	// todo get pod logs
+	//podName := pods.Items[0].GetName()
+	//logBytes, err := j.pc.GetLogs(podName, &corev1.PodLogOptions{}).DoRaw(ctx)
+	//if err != nil {
+	//	return "", errors.Wrapf(errLogsNotFound, "could not read logs: %v", err)
+	//}
 
-	return string(logBytes), err
+	return "", nil
 }
 
-func findCondition(conditions []v1.JobCondition, condition v1.JobConditionType) int {
+func findCondition(conditions []v12.JobCondition, condition v12.JobConditionType) int {
 	for i, c := range conditions {
 		if c.Type == condition && c.Status == corev1.ConditionTrue {
 			return i
