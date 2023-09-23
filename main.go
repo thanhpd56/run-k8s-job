@@ -5,8 +5,6 @@ import (
 	"flag"
 	"github.com/sethvargo/go-githubactions"
 	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/client-go/util/homedir"
-	"path/filepath"
 	"time"
 
 	"k8s.io/client-go/kubernetes"
@@ -23,17 +21,11 @@ func main() {
 		jobName:        action.GetInput("job-name"),
 	}
 
-	var kubeconfig *string
-	if home := homedir.HomeDir(); home != "" {
-		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
-	} else {
-		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
-	}
 	flag.Parse()
 	action.Debugf("kubeconfig input %s\n", input.kubeconfigFile)
 
 	// use the current context in kubeconfig
-	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
+	config, err := clientcmd.BuildConfigFromFlags("", input.kubeconfigFile)
 	if err != nil {
 		action.Fatalf("%v", err)
 	}

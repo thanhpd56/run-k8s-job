@@ -1,5 +1,5 @@
 name: Run Kubernetes Job
-author: Brent Pendergraft
+author: Phan Thanh upgraded from Brent Pendergraft
 description: 'Runs a Kubernetes Job and reports the output to stdout'
 inputs:
   kubeconfig-file:
@@ -8,31 +8,14 @@ inputs:
   image:
     description: 'Name of the docker image in a remote repository (i.e. "debian")'
     required: true
-  cluster-url:
-    description: 'Kubernetes cluster URL'
-    required: false
-  cluster-token:
-    description: 'Kubernetes API authentication token'
-    required: false
-  ca-file:
-    description: 'Path to the file containing the root CA cert for the kubernetes API server'
-    required: false
-  job-name: 
-    description: 'Name of the job (note: used only as a prefix for an auto-generated job name)'
-    required: false
-    default: ${{github.repository}}-job  
   namespace:
     description: 'Kubernetes namespace where the job will run'
-    required: false
-    default: 'default'
-  allowInsecure:
-    description: 'Connect to Kubernetes API server without TLS (not recommended)'
-    required: false
-    default: "false"
+    required: true
 
 runs:
   using: docker
   image: Dockerfile
+
 branding:
   icon: zap
   color: gray-dark
