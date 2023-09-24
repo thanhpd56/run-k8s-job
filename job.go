@@ -38,6 +38,11 @@ type podClient interface {
 	List(ctx context.Context, opts metav1.ListOptions) (*corev1.PodList, error)
 }
 
+type database struct {
+	dsn             string
+	migrationSource string
+}
+
 type JobRunner struct {
 	namespace    string
 	clientSet    kubernetes.Clientset
@@ -45,10 +50,10 @@ type JobRunner struct {
 	pc           podClient
 	pollInterval time.Duration
 	log          logger
+	database     database
 }
 
-func NewJobRunner(jc jobClient, pc podClient, pollInterval time.Duration, log logger, namespace string,
-	clientSet kubernetes.Clientset) JobRunner {
+func NewJobRunner(jc jobClient, pc podClient, pollInterval time.Duration, log logger, namespace string, clientSet kubernetes.Clientset, d database) JobRunner {
 	return JobRunner{
 		clientSet:    clientSet,
 		namespace:    namespace,
@@ -56,6 +61,7 @@ func NewJobRunner(jc jobClient, pc podClient, pollInterval time.Duration, log lo
 		pc:           pc,
 		pollInterval: pollInterval,
 		log:          log,
+		database:     d,
 	}
 }
 
@@ -81,6 +87,15 @@ func (j *JobRunner) RunJob(ctx context.Context, jobPrefix, namespace, image stri
 						{
 							Name:  fmt.Sprintf("%s-con", jobPrefix),
 							Image: image,
+							Command: []string{
+								"/migrate",
+							},
+							Args: []string{
+								"-source", j.database.migrationSource, "-database", j.database.dsn, "up",
+							},
+							//VolumeMounts: []corev1.VolumeMount{
+							//	{},
+							//},
 						},
 					},
 				},

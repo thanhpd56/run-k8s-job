@@ -14,17 +14,13 @@ import (
 func main() {
 	action := githubactions.New()
 
-	//input := ActionInput{
-	//	kubeconfigFile: action.GetInput("kubeconfig-file"),
-	//	namespace:      action.GetInput("namespace"),
-	//	image:          action.GetInput("image"),
-	//	jobName:        action.GetInput("job-name"),
-	//}
 	input := ActionInput{
-		kubeconfigFile: "/Users/macbook/.kube/config",
-		namespace:      "default",
-		image:          "hello-world",
-		jobName:        "migration",
+		kubeconfigFile:  action.GetInput("kubeconfig-file"),
+		namespace:       action.GetInput("namespace"),
+		image:           action.GetInput("image"),
+		jobName:         action.GetInput("job-name"),
+		dsn:             action.GetInput("dsn"),
+		migrationSource: action.GetInput("migration-source"),
 	}
 
 	flag.Parse()
@@ -49,7 +45,10 @@ func main() {
 	namespace := input.namespace
 	jobs := clientset.BatchV1().Jobs(namespace)
 	pods := clientset.CoreV1().Pods(namespace)
-	runner := NewJobRunner(jobs, pods, 5*time.Second, action, namespace, *clientset)
+	runner := NewJobRunner(jobs, pods, 5*time.Second, action, namespace, *clientset, database{
+		dsn:             input.dsn,
+		migrationSource: input.migrationSource,
+	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	logs, err := runner.RunJob(ctx, input.jobName, namespace, input.image)

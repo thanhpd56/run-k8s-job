@@ -14,6 +14,12 @@ inputs:
   job-name:
     description: 'Job name'
     required: true
+  dsn:
+    description: 'Database dsn'
+    required: true
+  migration-source:
+    description: 'Migration source'
+    required: true
 
 runs:
   using: docker
