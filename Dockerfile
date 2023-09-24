@@ -2,7 +2,7 @@ FROM golang:1.20-alpine AS builder
 
 ENV GO111MODULE=on CGO_ENABLED=0
 
-WORKDIR /go/src/github.com/InVisionApp/run-k8s-job
+WORKDIR /go/src/github.com/thanhpd56/run-k8s-job
 
 COPY . .
 
