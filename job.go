@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	v12 "k8s.io/api/batch/v1"
+	"k8s.io/client-go/kubernetes"
 	"time"
 
 	"github.com/pkg/errors"
@@ -37,14 +39,19 @@ type podClient interface {
 }
 
 type JobRunner struct {
+	namespace    string
+	clientSet    kubernetes.Clientset
 	jc           jobClient
 	pc           podClient
 	pollInterval time.Duration
 	log          logger
 }
 
-func NewJobRunner(jc jobClient, pc podClient, pollInterval time.Duration, log logger) JobRunner {
+func NewJobRunner(jc jobClient, pc podClient, pollInterval time.Duration, log logger, namespace string,
+	clientSet kubernetes.Clientset) JobRunner {
 	return JobRunner{
+		clientSet:    clientSet,
+		namespace:    namespace,
 		jc:           jc,
 		pc:           pc,
 		pollInterval: pollInterval,
@@ -91,11 +98,11 @@ func (j *JobRunner) RunJob(ctx context.Context, jobPrefix, namespace, image stri
 			return "", err
 		}
 
-		logString, _ := j.getLogs(ctx, job.GetName())
+		logString, _ := j.streamLogs(ctx, job.GetName())
 		return logString, err
 	}
 
-	return j.getLogs(ctx, job.GetName())
+	return j.streamLogs(ctx, job.GetName())
 }
 
 func (j *JobRunner) pollJobStatus(ctx context.Context, jobName string) error {
@@ -131,23 +138,46 @@ func (j *JobRunner) getJob(ctx context.Context, jobName string) (*v12.Job, error
 	return j.jc.Get(ctx, jobName, metav1.GetOptions{})
 }
 
-func (j *JobRunner) getLogs(ctx context.Context, jobName string) (string, error) {
-	//pods, err := j.pc.List(ctx, metav1.ListOptions{
-	//	LabelSelector: fmt.Sprintf("job-name=%s", jobName),
-	//})
-	//if err != nil {
-	//	return "", errors.Wrapf(errPodNotFound, "could not find pod: %v", err)
-	//}
+func (j *JobRunner) streamLogs(ctx context.Context, jobName string) (string, error) {
+	count := int64(100)
+	pods, err := j.pc.List(ctx, metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("job-name=%s", jobName),
+	})
+	if err != nil {
+		return "", errors.Wrapf(errPodNotFound, "could not find pod: %v", err)
+	}
+	podName := pods.Items[0].GetName()
 
-	// Need to figure out how to handle jobs where
-	// multiple pods are created because of backoffPolicy
-	// todo get pod logs
-	//podName := pods.Items[0].GetName()
-	//logBytes, err := j.pc.GetLogs(podName, &corev1.PodLogOptions{}).DoRaw(ctx)
-	//if err != nil {
-	//	return "", errors.Wrapf(errLogsNotFound, "could not read logs: %v", err)
-	//}
+	podLogOptions := corev1.PodLogOptions{
+		Follow:    true,
+		TailLines: &count,
+	}
 
+	podLogRequest := j.clientSet.CoreV1().
+		Pods(j.namespace).
+		GetLogs(podName, &podLogOptions)
+	stream, err := podLogRequest.Stream(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer stream.Close()
+
+	for {
+		buf := make([]byte, 2000)
+		numBytes, err := stream.Read(buf)
+
+		if err == io.EOF {
+			break
+		}
+		if numBytes == 0 {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		message := string(buf[:numBytes])
+		j.log.Debugf("%v", message)
+	}
 	return "", nil
 }
 
