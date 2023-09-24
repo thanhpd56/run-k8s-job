@@ -11,6 +11,9 @@ inputs:
   namespace:
     description: 'Kubernetes namespace where the job will run'
     required: true
+  job-name:
+    description: 'Job name'
+    required: true
 
 runs:
   using: docker
