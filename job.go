@@ -191,7 +191,7 @@ func (j *JobRunner) streamLogs(ctx context.Context, jobName string) (string, err
 			return "", err
 		}
 		message := string(buf[:numBytes])
-		j.log.Debugf("%v", message)
+		j.log.Warningf("%v", message)
 	}
 	return "", nil
 }
